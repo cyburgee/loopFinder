@@ -699,6 +699,13 @@
 			name = ofxGifEncoder;
 			sourceTree = "<group>";
 		};
+		1859EBA21902525E00C123C4 /* ofxTimeline */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = ofxTimeline;
+			sourceTree = "<group>";
+		};
 		1E45F8C3CCFF6847BFF957AA /* flann */ = {
 			isa = PBXGroup;
 			children = (
@@ -1229,6 +1236,7 @@
 		BB4B014C10F69532006C3DED /* addons */ = {
 			isa = PBXGroup;
 			children = (
+				1859EBA21902525E00C123C4 /* ofxTimeline */,
 				1859EBA1190026A100C123C4 /* ofxGifEncoder */,
 				480A780D8D0308AE4A368801 /* ofxGui */,
 				A0B90D3B0ADB9C1716816714 /* ofxOpenCv */,

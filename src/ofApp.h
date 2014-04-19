@@ -4,6 +4,7 @@
 #include "ofxCv.h"
 #include "ofxVideoRecorder.h"
 #include "ofxGifEncoder.h"
+#include "ofxUI.h"
 
 class ofApp : public ofBaseApp{
 public:
@@ -14,6 +15,7 @@ public:
     void mouseDragged(int x, int y, int button);
     void mousePressed(int x, int y, int button);
     void mouseReleased(int x, int y, int button);
+    void keyPressed(int key);
     void keyReleased(int key);
     
     ofxCv::FlowPyrLK flows;
@@ -59,7 +61,8 @@ public:
     int potentialEndIdx;
     
     cv::Mat firstFrame;
-    vector< cv::Mat* > potentialLoopEnds;
+    vector< cv::Mat > potentialLoopEnds;
+    vector<cv::Mat> bestMatches;
     
     cv::Size imResize;
     int scale;
@@ -74,4 +77,38 @@ public:
     
     int gifNum;
     vector<ofxGifEncoder *> gifses;
+    
+    //GUI STUFF
+    void drawGrid(float x, float y);
+    
+	void setGuiMatch();
+	void setGuiMovement();
+	void setGUI3();
+	void setGUI4();
+	void setGUI5();
+	
+	ofxUISuperCanvas *guiMatch;
+	ofxUISuperCanvas *guiMovement;
+	ofxUISuperCanvas *gui3;
+    ofxUISuperCanvas *gui4;
+    ofxUISuperCanvas *gui5;
+    
+    ofxUITextInput *textInput;
+    
+	bool hideGUI;
+	
+	float red, green, blue;
+	bool bdrawGrid;
+	bool bdrawPadding;
+	
+	void guiEvent(ofxUIEventArgs &e);
+    
+    ofxUIMovingGraph *mg;
+    ofxUIDropDownList *ddl;
+    ofxUIToggleMatrix *tm;
+    
+    float *buffer;
+    ofImage *img;
+    ofxUIEnvelope *env;
+
 };
