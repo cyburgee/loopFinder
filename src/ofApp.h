@@ -18,44 +18,45 @@ public:
     void keyPressed(int key);
     void keyReleased(int key);
     
-    ofxCv::FlowPyrLK flows;
-    
-    void audioIn(float *input, int bufferSize, int nChannels);
     void exit();
     
     bool hasMovement();
     bool checkForLoop();
+    void getBestLoop(cv::Mat start);
+    bool ditchSimilarLoop();
     void populateLoopEnds();
     void initEnds();
     void getMatFromFrameNum(cv::Mat *gray, int frameNum);
-    void saveGif();
+    void saveGif(int i);
     void onGifSaved(string &fileName);
     
     ofImage im;
     
     ofVideoPlayer vidPlayer;
     
+    ofxCv::FlowPyrLK flows;
     ofxCv::FlowFarneback flow;
     ofMesh mesh;
     int stepSize, xSteps, ySteps;
     
-    ofxVideoRecorder    vidRecorder;
-    ofSoundStream       soundStream;
-    bool bRecording;
-    int sampleRate;
-    int channels;
     string fileName;
     string fileExt;
     
-    ofFbo recordFbo;
-    ofPixels recordPixels;
+    vector< vector<ofImage> > loops;
+    vector< vector<ofImage> > displayLoops;
+    vector<int> matchIndeces;
+    vector<int> loopLengths;
+    vector<int> loopPlayIdx;
+    vector<ofRectangle> loopDrawRects;
+    vector<float> loopQuality;
     
-    vector<ofImage> loop;
     int loopIdx;
     
     int numFrames;
     int minPeriod;
+    float minPeriodSecs;
     int maxPeriod;
+    float maxPeriodSecs;
     float fps;
     int frameStart;
     int potentialEndIdx;
@@ -71,6 +72,8 @@ public:
     float maxMovementThresh;
     float loopThresh;
     float minChangeRatio;
+    bool minMovementBool;
+    bool maxMovementBool;
     
     bool loopFound;
     int loopNum;
@@ -78,22 +81,20 @@ public:
     int gifNum;
     vector<ofxGifEncoder *> gifses;
     
+    bool pausePlayback;
+    
+    int numLoopsInRow;
+    
     //GUI STUFF
     void drawGrid(float x, float y);
     
 	void setGuiMatch();
-	void setGuiMovement();
-	void setGUI3();
-	void setGUI4();
-	void setGUI5();
 	
 	ofxUISuperCanvas *guiMatch;
-	ofxUISuperCanvas *guiMovement;
-	ofxUISuperCanvas *gui3;
-    ofxUISuperCanvas *gui4;
-    ofxUISuperCanvas *gui5;
     
     ofxUITextInput *textInput;
+    ofxUISlider *minMove;
+    ofxUISlider *maxMove;
     
 	bool hideGUI;
 	
