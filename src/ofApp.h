@@ -5,6 +5,7 @@
 #include "ofxVideoRecorder.h"
 #include "ofxGifEncoder.h"
 #include "ofxUI.h"
+//#include "ofxTimeline.h"
 
 class ofApp : public ofBaseApp{
 public:
@@ -29,18 +30,25 @@ public:
     void getMatFromFrameNum(cv::Mat *gray, int frameNum);
     void saveGif(int i);
     void onGifSaved(string &fileName);
+    void loadVideo(string videoPath, string videoName);
+    
+    ofTrueTypeFont font;
     
     ofImage im;
     
     ofVideoPlayer vidPlayer;
     
-    ofxCv::FlowPyrLK flows;
+    ofxTimeline timeline;
+    ofFbo frameBuffer;
+    
+    /*ofxCv::FlowPyrLK flows;
     ofxCv::FlowFarneback flow;
     ofMesh mesh;
-    int stepSize, xSteps, ySteps;
+    int stepSize, xSteps, ySteps;*/
     
     string fileName;
     string fileExt;
+    string outputPrefix;
     
     vector< vector<ofImage> > loops;
     vector< vector<ofImage> > displayLoops;
@@ -50,6 +58,7 @@ public:
     vector<ofRectangle> loopDrawRects;
     vector<float> loopQuality;
     
+    int loopSelected;
     int loopIdx;
     
     int numFrames;
@@ -82,6 +91,7 @@ public:
     vector<ofxGifEncoder *> gifses;
     
     bool pausePlayback;
+    bool videoLoaded;
     
     int numLoopsInRow;
     

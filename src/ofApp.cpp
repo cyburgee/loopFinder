@@ -4,27 +4,9 @@ using namespace cv;
 using namespace ofxCv;
 
 void ofApp::setup(){
-    
-    //Video stuff
-    fileName = "walken";
-    fileExt = ".mp4";
-    vidPlayer.loadMovie(fileName + fileExt);
-    //vidPlayer.setUseTexture(true);
-    
-    numFrames = vidPlayer.getTotalNumFrames();
-    cout << "number of frames: " << numFrames << endl;
-    fps = (float)vidPlayer.getTotalNumFrames()/vidPlayer.getDuration();
-    minPeriodSecs = 1.0;
-    maxPeriodSecs = 3.0;
-    minPeriod = (int)(fps*minPeriodSecs);
-    maxPeriod = (int)(fps*maxPeriodSecs);
-    cout<< "min period: " << minPeriod << endl;
-    cout << "max period: " << maxPeriod << endl;
-    
+
+    videoLoaded = false;
     ofSetLogLevel(OF_LOG_VERBOSE);
-    
-    scale = 10;
-    imResize = cv::Size(vidPlayer.getWidth()/scale,vidPlayer.getHeight()/scale);
     
     numLoopsInRow = 5;
     
@@ -36,13 +18,8 @@ void ofApp::setup(){
     loopThresh = 0.07;
     minChangeRatio = MAXFLOAT;
     
-    //loopFound = false;
-    loopIdx = 0;
-    
-    frameStart = 0;
-    vidPlayer.setFrame(frameStart);
-    vidPlayer.update();
-    initEnds();
+    //loopIdx = 0;
+    loopSelected = -1;
     
     gifNum = 0;
     ofAddListener(ofxGifEncoder::OFX_GIF_SAVE_FINISHED, this, &ofApp::onGifSaved);
@@ -56,12 +33,29 @@ void ofApp::setup(){
     ddl = NULL;
     textInput = NULL;
     
-	setGuiMatch();
-
+    setGuiMatch();
     guiMatch->loadSettings("guiMatchSettings.xml");
-    ofSetWindowShape(guiMatch->getGlobalCanvasWidth() + vidPlayer.getWidth(), vidPlayer.getHeight()*2);
+    
+    //LOAD VIDEO FILE
+    ofFileDialogResult result = ofSystemLoadDialog("select video",false);
+    if(result.bSuccess){
+        loadVideo(result.getPath(),result.getName());
+    }
+    
+    font.loadFont("GUI/NewMedia Fett.ttf", 15, true, true);
+	font.setLineHeight(34.0f);
+	font.setLetterSpacing(1.035);
+    
+    //ofSetWindowShape(guiMatch->getGlobalCanvasWidth() + vidPlayer.getWidth(), vidPlayer.getHeight()*2);
     ofSetBackgroundColor(127);
     
+    //TIMELINE STUFF
+    timeline.setup();
+    timeline.setFrameRate(30);
+    //set big initial duration, longer than the video needs to be
+	timeline.setDurationInFrames(20000);
+	timeline.setLoopType(OF_LOOP_NORMAL);
+
 }
 
 
@@ -265,24 +259,27 @@ void ofApp::getBestLoop(cv::Mat start){
         displayLoops.push_back(display);
         //loopQuality.push_back(minChange);
         loopQuality.push_back(1 - (minChange/100));
+        
+        loopPlayIdx.push_back(0);
+        
+        if (!ditchSimilarLoop()) {
+            int newHeight = ceil((double)loops.size()/numLoopsInRow);
+            cout << "newHeight: " << newHeight << endl;
+            float loopWidth = (ofGetWidth()-guiMatch->getGlobalCanvasWidth())/numLoopsInRow;
+            float loopHeight = vidPlayer.getHeight()*(loopWidth/vidPlayer.getWidth());
+            float rectTop = vidPlayer.getHeight() + (newHeight - 1)*loopHeight;
+            float rectLeft = guiMatch->getGlobalCanvasWidth() + loopWidth*((loops.size() - 1)%numLoopsInRow);
+            cout << "rectTop: " << rectTop << endl;
+            cout << "rectLeft: " << rectLeft << endl;
+            ofRectangle drawRect = ofRectangle(rectLeft, rectTop, loopWidth, loopHeight);
+            loopDrawRects.push_back(drawRect);
+            //cout << "num Loops: " << loopLengths.at(loopLengths.size()-1) << endl;
+            //cout << newHeight << endl;
+            //cout << vidPlayer.getHeight() + newHeight*vidPlayer.getHeight() << endl;
+            //ofSetWindowShape(ofGetWidth(), vidPlayer.getHeight() + newHeight*vidPlayer.getHeight()/numLoopsInRow);
+        }
     }
     
-    loopPlayIdx.push_back(0);
-    
-    if (!ditchSimilarLoop()) {
-        int newHeight = ceil((double)loops.size()/numLoopsInRow);
-        cout << "newHeight: " << newHeight << endl;
-        float rectTop = vidPlayer.getHeight() + (newHeight - 1)*vidPlayer.getHeight()/numLoopsInRow;
-        float rectLeft = guiMatch->getGlobalCanvasWidth() + (vidPlayer.getWidth()/numLoopsInRow)*((loops.size() - 1)%numLoopsInRow);
-        cout << "rectTop: " << rectTop << endl;
-        cout << "rectLeft: " << rectLeft << endl;
-        ofRectangle drawRect = ofRectangle(rectLeft, rectTop, vidPlayer.getWidth()/numLoopsInRow, vidPlayer.getHeight()/numLoopsInRow);
-        loopDrawRects.push_back(drawRect);
-        //cout << "num Loops: " << loopLengths.at(loopLengths.size()-1) << endl;
-        //cout << newHeight << endl;
-        //cout << vidPlayer.getHeight() + newHeight*vidPlayer.getHeight() << endl;
-        ofSetWindowShape(ofGetWidth(), vidPlayer.getHeight() + newHeight*vidPlayer.getHeight()/numLoopsInRow);
-    }
     bestMatches.clear();
     matchIndeces.clear();
 }
@@ -326,14 +323,14 @@ bool ofApp::ditchSimilarLoop(){
     //}
     
     cout << "loopSimilarity: " << changeRatio[0] << endl;
-    cout << "sim threshhold: " << (1 - loopThresh/100)*3 << endl;
+    cout << "sim threshhold: " << (1 - loopThresh/100) << endl;
     int simCount;
     /*for (int i = 0; i < numCheckPoints; i++){
         if(changeRatio[i] <= (1-loopThresh/100)*0.75)
             simCount++;
     }*/
     //if (simCount >= (int)(numCheckPoints/2)) {
-    if(changeRatio[0] <= (1-loopThresh/100)*3){ // the first frames are very similar
+    if(changeRatio[0] <= (1-loopThresh/100)){ // the first frames are very similar
         if (loopQuality.at(loopQuality.size() - 2) > loopQuality.at(loopQuality.size() -1)) {
             cout << "erasing last one" << endl;
             loopQuality.erase(loopQuality.end() - 1);
@@ -359,7 +356,7 @@ bool ofApp::ditchSimilarLoop(){
 
 
 void ofApp::update(){
-    if (!pausePlayback) {
+    if (!pausePlayback && videoLoaded) {
         if (frameStart >= vidPlayer.getTotalNumFrames()){
             frameStart = 0;
             initEnds();
@@ -390,16 +387,40 @@ void ofApp::update(){
 
 
 void ofApp::draw(){
+
     ofBackground(127);
-    vidPlayer.setFrame(frameStart - 1);
-    vidPlayer.update();
-    vidPlayer.draw(guiMatch->getGlobalCanvasWidth(), 0);
-    
-    
-    for (int i = 0; i < loops.size(); i++) {
-        //ofImage loopFrame = loops.at(i).at(loopPlayIdx.at(i));
-        ofImage loopFrame = displayLoops.at(i).at(loopPlayIdx.at(i));
-        loopFrame.draw(loopDrawRects.at(i));
+    if(videoLoaded){
+        vidPlayer.setFrame(frameStart - 1);
+        vidPlayer.update();
+        vidPlayer.draw(guiMatch->getGlobalCanvasWidth() + (ofGetWidth() - guiMatch->getGlobalCanvasWidth())/2 - vidPlayer.getWidth()/2, 0);
+        
+        
+        for (int i = 0; i < loops.size(); i++) {
+            //ofImage loopFrame = loops.at(i).at(loopPlayIdx.at(i));
+            ofImage loopFrame = displayLoops.at(i).at(loopPlayIdx.at(i));
+            loopFrame.draw(loopDrawRects.at(i));
+        }
+        
+        if (loopSelected >= 0){
+            ofPushStyle();
+            ofNoFill();
+            ofSetColor(0, 255, 255);
+            ofSetLineWidth(2);
+            ofRect(loopDrawRects.at(loopSelected));
+            ofPopStyle();
+            string instructions = "Press 's' to save.\nPress 'r' to refine the loop.";
+            float width = font.getStringBoundingBox(instructions, 0, 0).width;
+            //ofDrawBitmapString(instructions, guiMatch->getGlobalCanvasWidth()/2 - width/2, 3*ofGetHeight()/4);
+            font.loadFont("GUI/NewMedia Fett.ttf", 10, true, true);
+            font.setLineHeight(12.0f);
+            font.setLetterSpacing(1.035);
+            font.drawString(instructions, 0, 3*ofGetHeight()/4);
+        }
+    }
+    else{
+        string instructions = "No video loaded. Please click 'Load Video' and choose a valid video file.";
+        float width = font.getStringBoundingBox(instructions, 0, 0).width;
+        font.drawString(instructions, ofGetWidth()/2 - width/2, 3*ofGetHeight()/4);
     }
     /*if(loopIdx >= loop.size())
         loopIdx = 0;
@@ -436,12 +457,6 @@ void ofApp::draw(){
             flow.draw();
         }
     }
-    
-    ofImage grab;
-    grab.allocate(ofGetWidth(),ofGetHeight(),OF_IMAGE_COLOR);
-    grab.grabScreen(0, 0, ofGetWidth(), ofGetHeight());
-    
-    vidRecorder.addFrame(grab.getPixelsRef());
 */
     
 }
@@ -459,13 +474,15 @@ void ofApp::mouseReleased(int x, int y, int button){
     pausePlayback = false;
     for (int i = 0; i < loopDrawRects.size(); i++) {
         if (loopDrawRects.at(i).inside(x, y)) {
-            saveGif(i);
+            loopSelected = i;
+            //saveGif(i);
         }
     }
     //saveGif();
 }
 
 void ofApp::saveGif(int i){
+    pausePlayback = true;
     ofxGifEncoder *giffy = new ofxGifEncoder();
     (*giffy).setup(vidPlayer.getWidth(), vidPlayer.getHeight(), 1/fps, 256);
     ofImage save;
@@ -474,16 +491,26 @@ void ofApp::saveGif(int i){
         save.setFromPixels(loop.at(j).getPixels(), vidPlayer.getWidth(), vidPlayer.getHeight(), OF_IMAGE_COLOR);
         (*giffy).addFrame(save);
     }
-    
-    string gifFileName = fileName + "/" + fileName + "_" + ofGetTimestampString() + ".gif";
-    ofDirectory dir(gifFileName);
-    if(!dir.exists()){
-        dir.create(true);
+    ofFileDialogResult result = ofSystemSaveDialog(outputPrefix + ".gif", "Save Loop as Gif");
+    if(result.bSuccess){
+        string gifFileName = result.getPath();
+        
+        
+        if (gifFileName.size() >= 3  && gifFileName.substr(gifFileName.size() - 4) != ".gif")
+            gifFileName += ".gif";
+        else if (gifFileName.size() <= 3)
+            gifFileName += ".gif";
+        //string gifFileName = outputPrefix + "/" + outputPrefix + "_" + ofGetTimestampString() + ".gif";
+        /*ofDirectory dir(gifFileName);
+        if(!dir.exists()){
+            dir.create(true);
+        }*/
+        cout << "gifFileName: " << gifFileName << endl;
+        (*giffy).save(gifFileName);
+        gifNum++;
+        gifses.push_back(giffy);
     }
-    cout << "gifFileName: " << gifFileName << endl;
-    (*giffy).save(gifFileName);
-    gifNum++;
-    gifses.push_back(giffy);
+    pausePlayback = false;
 }
 
 
@@ -498,115 +525,31 @@ void ofApp::exit() {
         (*gifses.at(i)).exit();
     }
     
-    guiMatch->saveSettings("guiMatchSettings.xml");
-    
-	delete guiMatch;
+    if(videoLoaded){
+        guiMatch->saveSettings("guiMatchSettings.xml");
+        delete guiMatch;
+    }
 }
 
 void ofApp::keyPressed(int key){
-    /*if(guiMovement->hasKeyboardFocus())
+    if(guiMatch->hasKeyboardFocus())
     {
         return;
-    }*/
+    }
 	switch (key)
 	{
-		case 't':
-        {
-            if(textInput != NULL)
-            {
-                textInput->setTextString(ofGetTimestampString());
-            }
-        }
-			break;
-            
-		case 'T':
-        {
-            if(tm != NULL)
-            {
-                int cols = tm->getColumnCount();
-                int rows = tm->getRowCount();
-                for(int row = 0; row < rows; row++)
-                {
-                    for(int col = 0; col < cols; col++)
-                    {
-                        cout << tm->getState(row, col) << "\t";
-                    }
-                    cout << endl;
-                }
-            }
-        }
-			break;
-            
-		case 'd':
-        {
-            if(ddl != NULL)
-            {
-                vector<ofxUIWidget *> selected = ddl->getSelected();
-                for(vector<ofxUIWidget *>::iterator it = selected.begin(); it != selected.end(); ++it)
-                {
-                    ofxUILabelToggle *lt = (ofxUILabelToggle *) (*it);
-                    cout << lt->getName() << endl;
-                }
-            }
-        }
-			break;
-            
-        case 'D':
-        {
-            if(ddl != NULL)
-            {
-                vector<string> names = ddl->getSelectedNames();
-                for(vector<string>::iterator it = names.begin(); it != names.end(); ++it)
-                {
-                    cout << (*it) << endl;
-                }
-            }
-        }
-			break;
-            
-		case 'r':
-        {
-            if(textInput != NULL)
-            {
-                textInput->setFocus(!textInput->isFocused());
-            }
-        }
-			break;
-            
-		case 'f':
-			ofToggleFullscreen();
-			break;
-            
-        case 'F':
-        {
-            if(tm != NULL)
-            {
-                tm->setDrawOutlineHighLight(!tm->getDrawOutlineHighLight());
-                //                tm->setDrawPaddingOutline(!tm->getDrawPaddingOutline());
-            }
-        }
-			break;
-            
 		case 'h':
             guiMatch->toggleVisible();
 			break;
-            
-		case 'p':
-			bdrawPadding = !bdrawPadding;
-			guiMatch->setDrawWidgetPaddingOutline(bdrawPadding);
-			break;
-            
-		case '[':
-			guiMatch->setDrawWidgetPadding(false);
-			break;
-            
-		case ']':
-			guiMatch->setDrawWidgetPadding(true);
-			break;
-			
-        case '1':
-            guiMatch->toggleVisible();
+        case 's':
+            if (loopSelected >=0 ) {
+                saveGif(loopSelected);
+            }
             break;
+        case 'r':
+            if (loopSelected >=0 ) {
+                //refineGif(loopSelected);
+            }
 		default:
 			break;
 	}
@@ -625,24 +568,34 @@ void ofApp::guiEvent(ofxUIEventArgs &e)
 	string name = e.getName();
 	int kind = e.getKind();
 	//cout << "got event from: " << name << endl;
-    if(name == "BUTTON"){
+    if(name == "Load Video"){
+        videoLoaded = false;
 		ofxUIButton *button = (ofxUIButton *) e.getButton();
+        if (button->getValue()){
+            pausePlayback = true;
+            ofFileDialogResult result = ofSystemLoadDialog("select video",false);
+            if(result.bSuccess){
+                loadVideo(result.getPath(),result.getName());
+            }
+        }
 	}
     else if (name == "Toggle Min Movement"){
         minMovementBool = e.getToggle()->getValue();
         //minMovementBool = !minMovementBool;
         minMove->setVisible(minMovementBool);
-        initEnds();
+        if(videoLoaded)
+            initEnds();
         //guiMatch->autoSizeToFitWidgets();
     }
     else if (name == "Toggle Max Movement"){
         maxMovementBool = e.getToggle()->getValue();
         //maxMovementBool = !maxMovementBool;
         maxMove->setVisible(maxMovementBool);
-        initEnds();
+        if (videoLoaded)
+            initEnds();
         //guiMatch->autoSizeToFitWidgets();
     }
-    else if(name == "TEXT INPUT")
+    /*else if(name == "Output Prefix")
     {
         ofxUITextInput *ti = (ofxUITextInput *) e.widget;
         if(ti->getInputTriggerType() == OFX_UI_TEXTINPUT_ON_ENTER)
@@ -658,12 +611,14 @@ void ofApp::guiEvent(ofxUIEventArgs &e)
             cout << "ON BLUR: ";
         }
         string output = ti->getTextString();
+        
         cout << output << endl;
-    }
+        outputPrefix = ti->getTextString();
+    }*/
     else if(name == "Length Range"){
         minPeriod = (int)(fps*minPeriodSecs);
         maxPeriod = (int)(fps*maxPeriodSecs);
-        if (!pausePlayback)
+        if (!pausePlayback && videoLoaded)
             initEnds();
     }
 }
@@ -677,13 +632,28 @@ void ofApp::setGuiMatch(){
     guiMatch->addLabel("Press 'h' to Hide GUIs", OFX_UI_FONT_SMALL);
     
     guiMatch->addSpacer();
+    guiMatch->addLabel("Load Video", OFX_UI_FONT_SMALL);
+    guiMatch->addLabelButton("Load Video", false);
+
+    /*guiMatch->addSpacer();
+    guiMatch->addLabel("Output File Prefix", OFX_UI_FONT_SMALL);
+    ofxUITextInput *prefixArea = guiMatch->addTextInput("Output Prefix", outputPrefix);
+    prefixArea->setAutoClear(false);
+    prefixArea->setTriggerType(OFX_UI_TRIGGER_ALL);
+    guiMatch->setWidgetFontSize(OFX_UI_FONT_MEDIUM);*/
+
+    
+    guiMatch->addSpacer();
     guiMatch->addLabel("Valid Loop Lengths",OFX_UI_FONT_SMALL);
     ofxUIRangeSlider *loopLength = guiMatch->addRangeSlider("Length Range", 0.25, 8.0, &minPeriodSecs, &maxPeriodSecs);
+    loopLength->setTriggerType(OFX_UI_TRIGGER_ALL);
     loopLength->setIncrement(0.05);
     
     guiMatch->addSpacer();
 	guiMatch->addLabel("Match Slider (percent)",OFX_UI_FONT_SMALL);
-	guiMatch->addSlider("Accuracy", 80.0, 100.0, &loopThresh)->setTriggerType(OFX_UI_TRIGGER_ALL);
+	ofxUISlider *match = guiMatch->addSlider("Accuracy", 80.0, 100.0, &loopThresh);
+    match->setTriggerType(OFX_UI_TRIGGER_ALL);
+    
     
 	guiMatch->addSpacer();
     guiMatch->addLabel("Min Movement (% change)",OFX_UI_FONT_SMALL);
@@ -694,17 +664,87 @@ void ofApp::setGuiMatch(){
     
     guiMatch->addSpacer();
     guiMatch->addLabel("Max Movement (% change)",OFX_UI_FONT_SMALL);
-    //maxMovementBool = true;
     guiMatch->addToggle("Toggle Max Movement", &maxMovementBool);
 	maxMove = guiMatch->addSlider("Max Movement", 0.0, 100.0, &maxMovementThresh);
-    maxMove->setTriggerType(OFX_UI_TRIGGER_BEGIN|OFX_UI_TRIGGER_ALL);
-    //maxMove->setVisible(true);
-    //maxMovementBool = false;
+    maxMove->setTriggerType(OFX_UI_TRIGGER_ALL);
     
     guiMatch->autoSizeToFitWidgets();
     maxMove->setVisible(false);
 	ofAddListener(guiMatch->newGUIEvent,this,&ofApp::guiEvent);
 }
+
+//--------------------------------------------------------------
+//void ofApp::chooseOutputDir(){
+    
+//}
+
+//--------------------------------------------------------------
+void ofApp::loadVideo(string videoPath, string videoName){
+    
+    //Video stuff
+    fileName = videoName;
+    vidPlayer.loadMovie(videoPath);
+    //vidPlayer.setUseTexture(true);
+    
+    numFrames = vidPlayer.getTotalNumFrames();
+    cout << "number of frames: " << numFrames << endl;
+    fps = (float)vidPlayer.getTotalNumFrames()/vidPlayer.getDuration();
+    minPeriodSecs = 1.0;
+    maxPeriodSecs = 3.0;
+    minPeriod = (int)(fps*minPeriodSecs);
+    maxPeriod = (int)(fps*maxPeriodSecs);
+    cout<< "min period: " << minPeriod << endl;
+    cout << "max period: " << maxPeriod << endl;
+    
+    scale = 10;
+    imResize = cv::Size(vidPlayer.getWidth()/scale,vidPlayer.getHeight()/scale);
+    
+    frameStart = 0;
+    vidPlayer.setFrame(frameStart);
+    vidPlayer.update();
+    initEnds();
+    pausePlayback = false;
+    int lastindex = videoName.find_last_of(".");
+    outputPrefix = videoName.substr(0, lastindex);
+    videoLoaded = true;
+    
+    
+    
+    
+    
+    //ofxTLVideoTrack* videoTrack = timeline.getVideoTrack("Video");
+    
+    /*
+    if(videoTrack == NULL){
+	    videoTrack = timeline.addVideoTrack("Video", videoPath);
+        loaded = (videoTrack != NULL);
+    }
+    else{
+        loaded = videoTrack->load(videoPath);
+    }
+    
+    if(loaded){
+        contentRectangle = ofRectangle(0,0, videoTrack->getPlayer()->getWidth(), videoTrack->getPlayer()->getHeight());
+        frameBuffer.allocate(contentRectangle.width, contentRectangle.height, GL_RGB);
+        
+        //timeline.clear();
+        //At the moment with video and audio tracks
+        //ofxTimeline only works correctly if the duration of the track == the duration of the timeline
+        //plan is to be able to fix this but for now...
+        timeline.setFrameRate(videoTrack->getPlayer()->getTotalNumFrames()/videoTrack->getPlayer()->getDuration());
+        timeline.setDurationInFrames(videoTrack->getPlayer()->getTotalNumFrames());
+        timeline.setTimecontrolTrack(videoTrack); //video playback will control the time
+		timeline.bringTrackToTop(videoTrack);
+    }
+    else{
+        videoPath = "";
+    }
+    settings.setValue("videoPath", videoPath);
+    settings.saveFile();
+     */
+    
+}
+
 
 
 

@@ -5,3 +5,6 @@ bin/data/*
 !bin/data/*.xml
 
 bin/loopFinder*
+*.png
+
+bin/data/GUI/defaultColors.xml
